@@ -47,7 +47,19 @@ The standard Comment node hides content by default. Markdown Note keeps your not
 
 ## Installation
 
+### Using the Palette Manager (recommended)
+
+1. Open Node-RED in your browser
+2. Go to **Menu** → **Manage palette** → **Install**
+3. Search for `node-red-contrib-markdown-note`
+4. Click **Install**
+
+### Using npm
+
 Run this in your Node-RED user directory (`~/.node-red`):
 
 ```bash
 npm install node-red-contrib-markdown-note
+```
+
+Then restart Node-RED.
