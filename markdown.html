@@ -20,72 +20,49 @@
             return this.content || '';
         },
         oneditprepare: function () {
-            var node = this;
-            var content = node.content || '';
+            var content = this.content || '';
 
             // Capture top-left anchor position before editing (only once)
             // This ensures the node stays in place after edits
-            if (node._noteTopY === undefined && node.y !== undefined && node.h !== undefined) {
-                node._noteTopY = node.y - (node.h / 2);
-                node._noteLastY = node.y;
+            if (this._noteTopY === undefined && this.y !== undefined && this.h !== undefined) {
+                this._noteTopY = this.y - (this.h / 2);
+                this._noteLastY = this.y;
             }
 
             // Create the ACE editor with markdown mode (Node-RED provides toolbar)
-            node.editor = RED.editor.createEditor({
+            this.editor = RED.editor.createEditor({
                 id: 'node-input-content-editor',
                 mode: 'ace/mode/markdown',
                 value: content
             });
 
-            node.editor.focus();
-
-            // While the editor is open, keep the node top-anchored
-            // This counteracts Node-RED's layout algorithm which re-centers nodes
-            node._editorResizeObserver = setInterval(function() {
-                var nodeEl = document.getElementById(node.id);
-                if (!nodeEl) return;
-                var rect = nodeEl.querySelector("rect.node") || nodeEl.querySelector("rect");
-                if (!rect) return;
-                var h = rect.getBBox().height;
-
-                node.y = node._noteTopY + (h / 2);
-                node._noteLastY = node.y;
-                RED.view.redraw(false);
-            }, 50);
+            this.editor.focus();
         },
         oneditsave: function () {
+            this.content = this.editor.getValue();
+            $("#node-input-content").val(this.content);
+            this.editor.destroy();
+            delete this.editor;
+
+            // Reposition node after Node-RED finishes its layout
             var node = this;
-            node.content = node.editor.getValue();
-            $("#node-input-content").val(node.content);
-            node.editor.destroy();
-            delete node.editor;
+            if (node._noteTopY !== undefined) {
+                setTimeout(function() {
+                    // Re-render to get correct height
+                    renderNoteNode(node);
 
-            // Stop the resize observer interval
-            if (node._editorResizeObserver) {
-                clearInterval(node._editorResizeObserver);
-                delete node._editorResizeObserver;
+                    // Anchor top edge
+                    if (node.h !== undefined) {
+                        node.y = node._noteTopY + (node.h / 2);
+                        node._noteLastY = node.y;
+                        RED.view.redraw(true);
+                    }
+                }, 0);
             }
-
-            // Final re-render to adjust height and y
-            renderNoteNode(node);
-
-            // Keep top-left anchor
-            node.y = node._noteTopY + (node.h / 2);
-            node._noteLastY = node.y;
-
-            RED.view.redraw(true);
         },
         oneditcancel: function () {
-            if (this.editor) {
-                this.editor.destroy();
-                delete this.editor;
-            }
-
-            // Stop the resize observer interval
-            if (this._editorResizeObserver) {
-                clearInterval(this._editorResizeObserver);
-                delete this._editorResizeObserver;
-            }
+            this.editor.destroy();
+            delete this.editor;
         },
         oneditresize: function (size) {
             var rows = $("#dialog-form>div:not(.node-text-editor-row)");
