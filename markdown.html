@@ -11,8 +11,7 @@
         label: function () {
             // Convert actual newlines to literal \n that Node-RED interprets as line breaks
             if (this.content) {
-                var label = this.content.replace(/\n/g, '\\n ');
-                return label;
+                return this.content.replace(/\n/g, '\\n ');
             }
             return 'note';
         },
@@ -65,18 +64,24 @@
     RED.events.on("nodes:change", function (node) {
         if (node.type === "note") {
             // Longer delay after changes to allow Node-RED to recalculate size
-            setTimeout(function () { renderNoteNode(node); }, 150);
+            // Multiple renders to catch the resize
+            setTimeout(function () { renderNoteNode(node); }, 50);
+            setTimeout(function () { renderNoteNode(node); }, 200);
+            setTimeout(function () { renderNoteNode(node); }, 500);
         }
     });
 
     RED.events.on("view:redraw", function () {
-        setTimeout(function () {
-            RED.nodes.eachNode(function (node) {
-                if (node.type === "note") {
-                    renderNoteNode(node);
-                }
-            });
-        }, 50);
+        // Multiple renders to catch any delayed sizing
+        [50, 150, 400].forEach(function(delay) {
+            setTimeout(function () {
+                RED.nodes.eachNode(function (node) {
+                    if (node.type === "note") {
+                        renderNoteNode(node);
+                    }
+                });
+            }, delay);
+        });
     });
 
     function renderNoteNode(node) {
@@ -85,9 +90,25 @@
 
         var g = d3.select(nodeEl);
 
+        // Clear any previous custom content FIRST
+        g.selectAll(".note-overlay").remove();
+
         // CSS-BASED HIDING: Apply class to parent group
-        // The CSS rules will handle hiding the text, icons, etc.
         g.classed("note-hidden-content", true);
+
+        // AGGRESSIVE HIDING: Hide direct children of the node group except rect
+        var nodeGroup = g.node();
+        for (var i = 0; i < nodeGroup.childNodes.length; i++) {
+            var child = nodeGroup.childNodes[i];
+            if (child.nodeType === 1) { // Element nodes only
+                var tagName = child.tagName.toLowerCase();
+                // Keep rect (the node background)
+                if (tagName !== 'rect') {
+                    var el = d3.select(child);
+                    el.style("display", "none").style("visibility", "hidden").style("opacity", "0");
+                }
+            }
+        }
 
         // Get the node's main rect to determine size
         var rect = g.select("rect.node");
@@ -99,16 +120,18 @@
         var w = bbox.width;
         var h = bbox.height;
 
-        // Clear any previous custom content
-        g.selectAll(".note-overlay").remove();
-
         // INSET: Render overlay slightly smaller than rect to reveal the border stroke
         // Node-RED standard nodes have rounded corners.
         // By insetting 1px, we sit "inside" the stroke.
         var inset = 1;
 
+        // Pre-process content: convert single newlines to markdown line breaks
+        // In markdown, single \n doesn't create a line break - need "  \n" (two spaces + newline)
+        // This ensures the rendered output matches the line count used for node sizing
+        var content = (node.content || '').replace(/\n/g, '  \n');
+
         // Render markdown to HTML
-        var html = RED.utils.renderMarkdown(RED.utils.sanitize(node.content || ''));
+        var html = RED.utils.renderMarkdown(RED.utils.sanitize(content));
 
         // Create foreignObject to hold the HTML content
         var fo = g.append("foreignObject")
@@ -119,13 +142,30 @@
             .attr("height", h - (inset * 2))
             .attr("pointer-events", "none");
 
-        fo.append("xhtml:div")
+        var contentDiv = fo.append("xhtml:div")
             .attr("class", "note-node-content")
             .attr("xmlns", "http://www.w3.org/1999/xhtml")
             .style("width", (w - (inset * 2)) + "px")
-            .style("height", (h - (inset * 2)) + "px")
             .style("overflow", "hidden")
             .html(html);
+
+        // Measure actual content height and resize node to fit
+        var contentNode = contentDiv.node();
+        if (contentNode) {
+            // Minimum height of one line (14px font * 1.5 line-height + padding)
+            var minHeight = 28;
+            var actualHeight = Math.max(contentNode.scrollHeight + (inset * 2), minHeight);
+            // Only shrink, don't expand beyond what Node-RED allocated
+            if (actualHeight < h) {
+                rect.attr("height", actualHeight);
+                fo.attr("height", actualHeight - (inset * 2));
+                contentDiv.style("height", (actualHeight - (inset * 2)) + "px");
+                // Update Node-RED's internal node dimensions so moves don't reset size
+                node.h = actualHeight;
+            } else {
+                contentDiv.style("height", (h - (inset * 2)) + "px");
+            }
+        }
     }
 </script>
 
@@ -156,55 +196,55 @@
 <style>
     /* Markdown content rendered inside the node */
     .note-node-content {
-        font-size: 13px;
-        line-height: 1.4;
+        font-size: 14px;
+        line-height: 1.5;
         color: #333;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        padding: 6px;
+        padding: 0 8px;
         background: #F3E5AB;
         border-radius: 4px;
     }
 
     .note-node-content h1 {
-        font-size: 16px;
+        font-size: 18px;
         font-weight: bold;
-        margin: 0 0 6px 0;
+        margin: 0 0 8px 0;
         border-bottom: 1px solid #ccc;
-        padding-bottom: 3px;
+        padding-bottom: 4px;
     }
 
     .note-node-content h2 {
+        font-size: 16px;
+        font-weight: bold;
+        margin: 8px 0 6px 0;
+    }
+
+    .note-node-content h3 {
         font-size: 15px;
         font-weight: bold;
         margin: 6px 0 4px 0;
     }
 
-    .note-node-content h3 {
-        font-size: 14px;
-        font-weight: bold;
-        margin: 4px 0 3px 0;
-    }
-
     .note-node-content p {
-        margin: 2px 0;
+        margin: 4px 0;
     }
 
     .note-node-content ul,
     .note-node-content ol {
-        margin: 2px 0;
-        padding-left: 15px;
+        margin: 4px 0;
+        padding-left: 18px;
     }
 
     .note-node-content li {
-        margin: 1px 0;
+        margin: 2px 0;
     }
 
     .note-node-content code {
         background: rgba(0, 0, 0, 0.08);
-        padding: 1px 4px;
+        padding: 2px 5px;
         border-radius: 2px;
         font-family: monospace;
-        font-size: 12px;
+        font-size: 13px;
     }
 
     .note-node-content pre {
@@ -233,18 +273,16 @@
         font-style: italic;
     }
 
-    /* 
+    /*
        CSS Hiding Logic for Sticky Note
-       When the node group 'g' has class 'note-hidden-content', 
-       we forcefully hide all standard Node-RED visual elements 
-       that usually clutter the note.
+       Hide Node-RED's default label text, icons, etc.
     */
-    g.note-hidden-content>text,
-    g.note-hidden-content>.node_icon_group,
-    g.note-hidden-content>.node-label,
-    g.note-hidden-content>.node-label-spacer,
-    g.note-hidden-content>image {
+    g.note-hidden-content text,
+    g.note-hidden-content .node_icon_group,
+    g.note-hidden-content .node_icon,
+    g.note-hidden-content image {
         display: none !important;
+        visibility: hidden !important;
     }
 
     /* Ensure our specific overlay is always visible even if we get aggressive */
