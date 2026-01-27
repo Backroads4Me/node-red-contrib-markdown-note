@@ -32,7 +32,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Backroads4Me/node-red-contrib-markdown-note.git"
+    "url": "git+https://github.com/Backroads4Me/node-red-contrib-markdown-note.git"
   },
   "engines": {
     "node": ">=14.0.0"
