@@ -12,6 +12,18 @@
   ],
   "author": "Ted Lanham <tedlanham@gmail.com>",
   "license": "MIT",
+  "homepage": "https://github.com/Backroads4Me/node-red-contrib-markdown-note",
+  "bugs": {
+    "url": "https://github.com/Backroads4Me/node-red-contrib-markdown-note/issues"
+  },
+  "main": "markdown.js",
+  "files": [
+    "markdown.js",
+    "markdown.html",
+    "package.json",
+    "README.md",
+    "LICENSE"
+  ],
   "node-red": {
     "version": ">=3.0.0",
     "nodes": {
