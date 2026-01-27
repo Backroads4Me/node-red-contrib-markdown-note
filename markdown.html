@@ -1,364 +1,361 @@
 <script type="text/javascript">
-    RED.nodes.registerType('note', {
-        category: 'common',
-        color: '#F3E5AB',
-        defaults: {
-            content: { value: '' }
-        },
-        inputs: 0,
-        outputs: 0,
-        icon: 'font-awesome/fa-file-text-o',
-        label: function () {
-            // Convert actual newlines to literal \n that Node-RED interprets as line breaks
-            if (this.content) {
-                return this.content.replace(/\n/g, '\\n ');
-            }
-            return 'note';
-        },
-        info: function () {
-            // Show content in Info sidebar when node is selected
-            return this.content || '';
-        },
-        oneditprepare: function () {
-            var content = this.content || '';
+  RED.nodes.registerType("note", {
+    category: "common",
+    color: "#F3E5AB",
+    defaults: {
+      content: { value: "" },
+    },
+    inputs: 0,
+    outputs: 0,
+    icon: "font-awesome/fa-file-text-o",
+    label: function () {
+      // Convert actual newlines to literal \n that Node-RED interprets as line breaks
+      if (this.content) {
+        return this.content.replace(/\n/g, "\\n ");
+      }
+      return "note";
+    },
 
-            // Capture top-left anchor position before editing (only once)
-            // This ensures the node stays in place after edits
-            if (this._noteTopY === undefined && this.y !== undefined && this.h !== undefined) {
-                this._noteTopY = this.y - (this.h / 2);
-                this._noteLastY = this.y;
-            }
+    oneditprepare: function () {
+      var content = this.content || "";
 
-            // Create the ACE editor with markdown mode (Node-RED provides toolbar)
-            this.editor = RED.editor.createEditor({
-                id: 'node-input-content-editor',
-                mode: 'ace/mode/markdown',
-                value: content
-            });
+      // Capture top-left anchor position before editing
+      // This ensures the node stays in place after edits
+      if (
+        this._noteTopY === undefined &&
+        this.y !== undefined &&
+        this.h !== undefined
+      ) {
+        this._noteTopY = this.y - this.h / 2;
+        this._noteLastY = this.y;
+      }
 
-            this.editor.focus();
-        },
-        oneditsave: function () {
-            this.content = this.editor.getValue();
-            $("#node-input-content").val(this.content);
-            this.editor.destroy();
-            delete this.editor;
+      // Create the ACE editor with markdown mode
+      this.editor = RED.editor.createEditor({
+        id: "node-input-content-editor",
+        mode: "ace/mode/markdown",
+        value: content,
+      });
 
-            // Reposition node after Node-RED finishes its layout
-            var node = this;
-            if (node._noteTopY !== undefined) {
-                setTimeout(function () {
-                    // Re-render to get correct height
-                    renderNoteNode(node);
+      this.editor.focus();
+    },
+    oneditsave: function () {
+      this.content = this.editor.getValue();
+      $("#node-input-content").val(this.content);
+      this.editor.destroy();
+      delete this.editor;
 
-                    // Anchor top edge
-                    if (node.h !== undefined) {
-                        node.y = node._noteTopY + (node.h / 2);
-                        node._noteLastY = node.y;
-                        RED.view.redraw(true);
-                    }
-                }, 0);
-            }
-        },
-        oneditcancel: function () {
-            this.editor.destroy();
-            delete this.editor;
-        },
-        oneditresize: function (size) {
-            var rows = $("#dialog-form>div:not(.node-text-editor-row)");
-            var height = $("#dialog-form").height();
-            for (var i = 0; i < rows.length; i++) {
-                height -= $(rows[i]).outerHeight(true);
-            }
-            var editorRow = $("#dialog-form>div.node-text-editor-row");
-            height -= (parseInt(editorRow.css("marginTop")) + parseInt(editorRow.css("marginBottom")));
-            $(".node-text-editor").css("height", height + "px");
-            this.editor.resize();
-        }
-    });
+      // Reposition node after Node-RED finishes its layout
+      var node = this;
+      if (node._noteTopY !== undefined) {
+        setTimeout(function () {
+          // Re-render to get correct height
+          renderNoteNode(node);
 
-    // Render markdown content inside nodes on the workspace
-    RED.events.on("nodes:add", function (node) {
-        if (node.type === "note") {
-            setTimeout(function () { renderNoteNode(node); }, 100);
-        }
-    });
+          // Anchor top edge
+          if (node.h !== undefined) {
+            node.y = node._noteTopY + node.h / 2;
+            node._noteLastY = node.y;
+            RED.view.redraw(true);
+          }
+        }, 0);
+      }
+    },
+    oneditcancel: function () {
+      this.editor.destroy();
+      delete this.editor;
+    },
+    oneditresize: function (size) {
+      var rows = $("#dialog-form>div:not(.node-text-editor-row)");
+      var height = $("#dialog-form").height();
+      for (var i = 0; i < rows.length; i++) {
+        height -= $(rows[i]).outerHeight(true);
+      }
+      var editorRow = $("#dialog-form>div.node-text-editor-row");
+      height -=
+        parseInt(editorRow.css("marginTop")) +
+        parseInt(editorRow.css("marginBottom"));
+      $(".node-text-editor").css("height", height + "px");
+      this.editor.resize();
+    },
+  });
 
-    RED.events.on("nodes:change", function (node) {
-        if (node.type === "note") {
-            // Longer delay after changes to allow Node-RED to recalculate size
-            // Multiple renders to catch the resize
-            setTimeout(function () { renderNoteNode(node); }, 50);
-            setTimeout(function () { renderNoteNode(node); }, 200);
-            setTimeout(function () { renderNoteNode(node); }, 500);
-        }
-    });
-
-    RED.events.on("view:redraw", function () {
-        // Multiple renders to catch any delayed sizing
-        [50, 150, 400].forEach(function (delay) {
-            setTimeout(function () {
-                RED.nodes.eachNode(function (node) {
-                    if (node.type === "note") {
-                        renderNoteNode(node);
-                    }
-                });
-            }, delay);
-        });
-    });
-
-    function renderNoteNode(node) {
-        var nodeEl = document.getElementById(node.id);
-        if (!nodeEl) return;
-
-        var g = d3.select(nodeEl);
-
-        // Clear any previous custom content FIRST
-        g.selectAll(".note-overlay").remove();
-
-        // CSS-BASED HIDING: Apply class to parent group
-        g.classed("note-hidden-content", true);
-
-        // AGGRESSIVE HIDING: Hide direct children of the node group except rect
-        var nodeGroup = g.node();
-        for (var i = 0; i < nodeGroup.childNodes.length; i++) {
-            var child = nodeGroup.childNodes[i];
-            if (child.nodeType === 1) { // Element nodes only
-                var tagName = child.tagName.toLowerCase();
-                // Keep rect (the node background)
-                if (tagName !== 'rect') {
-                    var el = d3.select(child);
-                    el.style("display", "none").style("visibility", "hidden").style("opacity", "0");
-                }
-            }
-        }
-
-        // Get the node's main rect to determine size
-        var rect = g.select("rect.node");
-        // Fallback if class .node doesn't exist (older Node-RED or different theme?)
-        if (rect.empty()) rect = g.select("rect");
-        if (rect.empty()) return;
-
-        var bbox = rect.node().getBBox();
-        var w = bbox.width;
-        var h = bbox.height;
-
-        // INSET: Render overlay slightly smaller than rect to reveal the border stroke
-        // Node-RED standard nodes have rounded corners.
-        // By insetting 1px, we sit "inside" the stroke.
-        var inset = 1;
-
-        // Pre-process content: convert single newlines to markdown line breaks
-        // In markdown, single \n doesn't create a line break - need "  \n" (two spaces + newline)
-        // 
-        // CRITICAL FIX: We also need to PRESERVE blank lines (empty lines).
-        // Standard markdown often collapses consecutive blank lines.
-        // We replace empty or whitespace-only lines with a Non-Breaking Space (\u00A0).
-        // This forces the renderer to draw a line of height, which in turn
-        // allows the node to resize correctly for "visual" blank space.
-
-        var rawContent = node.content || '';
-
-        // 1. Sanitize FIRST so we don't accidentally escape our injection or leave an opening for injection
-        var sanitized = RED.utils.sanitize(rawContent);
-
-        // 2. Split into lines
-        var lines = sanitized.split('\n');
-
-        // 3. Process each line: if empty/whitespace, replace with &nbsp; (unicode \u00A0)
-        var processedLines = lines.map(function (line) {
-            if (!line.trim()) {
-                return '\u00A0';
-            }
-            return line;
-        });
-
-        // 4. Join back with markdown hard break (space space newline)
-        var finalMarkdown = processedLines.join('  \n');
-
-        // Render markdown to HTML
-        var html = RED.utils.renderMarkdown(finalMarkdown);
-
-        // Create foreignObject to hold the HTML content
-        var fo = g.append("foreignObject")
-            .attr("class", "note-overlay")
-            .attr("x", inset)
-            .attr("y", inset)
-            .attr("width", w - (inset * 2))
-            .attr("height", h - (inset * 2))
-            .attr("pointer-events", "none");
-
-        var contentDiv = fo.append("xhtml:div")
-            .attr("class", "note-node-content")
-            .attr("xmlns", "http://www.w3.org/1999/xhtml")
-            .style("width", (w - (inset * 2)) + "px")
-            .style("overflow", "hidden")
-            .html(html);
-
-        // Measure actual content height and resize node to fit
-        var contentNode = contentDiv.node();
-        if (contentNode) {
-            // Minimum height of one line (14px font * 1.5 line-height + padding)
-            // Minimum height of one line (14px font * 1.5 line-height + padding)
-            var minHeight = 28;
-            var actualHeight = Math.max(contentNode.scrollHeight + (inset * 2), minHeight);
-
-            // Use the smaller of Node-RED's allocation or our measured height
-            // SNAP TO GRID: Round up to nearest 40px (double grid size)
-            // Node-RED nodes align to center.
-            // Height 20px (1 unit) -> top edge is at -10px (mid-grid).
-            // Height 40px (2 units) -> top edge is at -20px (on-grid).
-            // To ensure consistent edge alignment, we enforce 40px increments.
-            var snappedHeight = Math.ceil(actualHeight / 40) * 40;
-
-            // Ensure we at least have the minimum height (snapped)
-            // We use snappedHeight directly to allow expansion beyond initial 'h'
-            var finalHeight = Math.max(snappedHeight, Math.ceil(minHeight / 40) * 40);
-
-            // Track top edge position to anchor the node
-            // If this is first render OR user has moved the node, recalculate anchor
-            var currentTopY = node.y - (h / 2);
-            if (node._noteTopY === undefined || node._noteLastY === undefined) {
-                // First time: store current top edge as anchor
-                node._noteTopY = currentTopY;
-            } else if (Math.abs(node.y - node._noteLastY) > 1) {
-                // User moved the node (y changed from what we set) - update anchor
-                node._noteTopY = currentTopY;
-            }
-
-            // Set y so top edge stays at _noteTopY
-            var newY = node._noteTopY + (finalHeight / 2);
-            node.y = newY;
-            node._noteLastY = newY;
-
-            rect.attr("height", finalHeight);
-            fo.attr("height", finalHeight - (inset * 2));
-            contentDiv.style("height", (finalHeight - (inset * 2)) + "px");
-
-            // Update Node-RED's internal dimensions
-            node.h = finalHeight;
-        }
+  // Render markdown content inside nodes on the workspace
+  RED.events.on("nodes:add", function (node) {
+    if (node.type === "note") {
+      setTimeout(function () {
+        renderNoteNode(node);
+      }, 100);
     }
+  });
+
+  RED.events.on("nodes:change", function (node) {
+    if (node.type === "note") {
+      // Delay to allow Node-RED to recalculate size
+      setTimeout(function () {
+        renderNoteNode(node);
+      }, 100);
+    }
+  });
+
+  RED.events.on("view:redraw", function () {
+    // Single redraw after view settles
+    setTimeout(function () {
+      RED.nodes.eachNode(function (node) {
+        if (node.type === "note") {
+          renderNoteNode(node);
+        }
+      });
+    }, 100);
+  });
+
+  function renderNoteNode(node) {
+    var nodeEl = document.getElementById(node.id);
+    if (!nodeEl) return;
+
+    var g = d3.select(nodeEl);
+
+    // Clear any previous custom content FIRST
+    g.selectAll(".note-overlay").remove();
+
+    // CSS-BASED HIDING: Apply class to parent group
+    g.classed("note-hidden-content", true);
+
+    // Get the node's main rect to determine size
+    var rect = g.select("rect.node");
+    // Fallback if class .node doesn't exist
+    if (rect.empty()) rect = g.select("rect");
+    if (rect.empty()) return;
+
+    var bbox = rect.node().getBBox();
+    var w = bbox.width;
+    var h = bbox.height;
+
+    // INSET: Render overlay slightly smaller than rect to reveal the border stroke
+    // Node-RED standard nodes have rounded corners.
+    // By insetting 1px, we sit "inside" the stroke.
+    var inset = 1;
+
+    // Pre-process content: convert single newlines to markdown line breaks
+    // In markdown, single \n doesn't create a line break - need "  \n" (two spaces + newline)
+    //
+    // We also need to preserve blank lines intentionally entered.
+    // Standard markdown often collapses consecutive blank lines.
+    // We replace empty or whitespace-only lines with a Non-Breaking Space (\u00A0).
+    // This forces the renderer to draw a line of height, which in turn
+    // allows the node to resize correctly for "visual" blank space.
+
+    var rawContent = node.content || "";
+
+    // Sanitize FIRST so we don't accidentally escape our injection or leave an opening for injection
+    var sanitized = RED.utils.sanitize(rawContent);
+
+    // Split into lines
+    var lines = sanitized.split("\n");
+
+    // Process each line: if empty/whitespace, replace with &nbsp; (unicode \u00A0)
+    var processedLines = lines.map(function (line) {
+      if (!line.trim()) {
+        return "\u00A0";
+      }
+      return line;
+    });
+
+    // Join back with markdown hard break (space space newline)
+    var finalMarkdown = processedLines.join("  \n");
+
+    // Render markdown to HTML
+    var html = RED.utils.renderMarkdown(finalMarkdown);
+
+    // Create foreignObject to hold the HTML content
+    var fo = g
+      .append("foreignObject")
+      .attr("class", "note-overlay")
+      .attr("x", inset)
+      .attr("y", inset)
+      .attr("width", w - inset * 2)
+      .attr("height", h - inset * 2)
+      .attr("pointer-events", "none");
+
+    var contentDiv = fo
+      .append("xhtml:div")
+      .attr("class", "note-node-content")
+      .attr("xmlns", "http://www.w3.org/1999/xhtml")
+      .style("width", w - inset * 2 + "px")
+      .style("overflow", "hidden")
+      .html(html);
+
+    // Measure actual content height and resize node to fit
+    var contentNode = contentDiv.node();
+    if (contentNode) {
+      // Minimum height of one line (14px font * 1.5 line-height + padding)
+      var minHeight = 28;
+      var actualHeight = Math.max(
+        contentNode.scrollHeight + inset * 2,
+        minHeight,
+      );
+
+      // Use the smaller of Node-RED's allocation or our measured height
+      // SNAP TO GRID: Round up to nearest 40px (double grid size)
+      // Node-RED nodes align to center.
+      // Height 20px (1 unit) -> top edge is at -10px (mid-grid).
+      // Height 40px (2 units) -> top edge is at -20px (on-grid).
+      // To ensure consistent edge alignment, we enforce 40px increments.
+      var snappedHeight = Math.ceil(actualHeight / 40) * 40;
+
+      // We use snappedHeight directly to allow expansion beyond initial 'h'
+      var finalHeight = Math.max(snappedHeight, Math.ceil(minHeight / 40) * 40);
+
+      // Track top edge position to anchor the node
+      // If this is first render OR user has moved the node, recalculate anchor
+      var currentTopY = node.y - h / 2;
+      if (node._noteTopY === undefined || node._noteLastY === undefined) {
+        // First time: store current top edge as anchor
+        node._noteTopY = currentTopY;
+      } else if (Math.abs(node.y - node._noteLastY) > 1) {
+        // User moved the node - update anchor
+        node._noteTopY = currentTopY;
+      }
+
+      // Set y so top edge stays at _noteTopY
+      var newY = node._noteTopY + finalHeight / 2;
+      node.y = newY;
+      node._noteLastY = newY;
+
+      rect.attr("height", finalHeight);
+      fo.attr("height", finalHeight - inset * 2);
+      contentDiv.style("height", finalHeight - inset * 2 + "px");
+
+      // Update Node-RED's internal dimensions
+      node.h = finalHeight;
+    }
+  }
 </script>
 
 <script type="text/html" data-template-name="note">
-    <div class="form-row node-text-editor-row">
-        <input type="hidden" id="node-input-content">
-        <div style="height: 250px; min-height:150px;" class="node-text-editor" id="node-input-content-editor"></div>
-    </div>
+  <div class="form-row node-text-editor-row">
+    <input type="hidden" id="node-input-content" />
+    <div
+      style="height: 250px; min-height:150px;"
+      class="node-text-editor"
+      id="node-input-content-editor"
+    ></div>
+  </div>
 </script>
 
 <script type="text/html" data-help-name="note">
-    <p>A node for displaying markdown-formatted notes in your flow.</p>
-    <h3>Usage</h3>
-    <p>Use this node to add documentation, instructions, or annotations directly in your Node-RED flows.</p>
-    <p>Double-click to edit. Use the toolbar buttons or type markdown syntax directly:</p>
-    <ul>
-        <li><b>Headers:</b> # H1, ## H2, ### H3</li>
-        <li><b>Bold:</b> **text**</li>
-        <li><b>Italic:</b> _text_</li>
-        <li><b>Code:</b> `code`</li>
-        <li><b>Lists:</b> - item or 1. item</li>
-        <li><b>Links:</b> [text](url)</li>
-        <li><b>Quote:</b> > text</li>
-    </ul>
-    <p>Content appears in the Info sidebar when the node is selected.</p>
+  <p>A node for displaying markdown-formatted notes in your flow.</p>
+  <h3>Usage</h3>
+  <p>
+    Use this node to add documentation, instructions, or annotations directly in
+    your Node-RED flows.
+  </p>
+  <p>
+    Double-click to edit. Use the toolbar buttons or type markdown syntax
+    directly:
+  </p>
+  <ul>
+    <li><b>Headers:</b> # H1, ## H2, ### H3</li>
+    <li><b>Bold:</b> **text**</li>
+    <li><b>Italic:</b> _text_</li>
+    <li><b>Code:</b> `code`</li>
+    <li><b>Lists:</b> - item or 1. item</li>
+    <li><b>Links:</b> [text](url)</li>
+    <li><b>Quote:</b> > text</li>
+  </ul>
+
 </script>
 
 <style>
-    /* Markdown content rendered inside the node */
-    .note-node-content {
-        font-size: 14px;
-        line-height: 1.5;
-        color: #333;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        padding: 0 8px;
-        background: #F3E5AB;
-        border-radius: 4px;
-    }
+  /* Markdown content rendered inside the node */
+  .note-node-content {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+    font-family:
+      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 0 8px;
+    background: #f3e5ab;
+    border-radius: 4px;
+  }
 
-    .note-node-content h1 {
-        font-size: 18px;
-        font-weight: bold;
-        margin: 0 0 8px 0;
-        border-bottom: 1px solid #ccc;
-        padding-bottom: 4px;
-    }
+  .note-node-content h1 {
+    font-size: 18px;
+    font-weight: bold;
+    margin: 0 0 8px 0;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
 
-    .note-node-content h2 {
-        font-size: 16px;
-        font-weight: bold;
-        margin: 8px 0 6px 0;
-    }
+  .note-node-content h2 {
+    font-size: 16px;
+    font-weight: bold;
+    margin: 8px 0 6px 0;
+  }
 
-    .note-node-content h3 {
-        font-size: 15px;
-        font-weight: bold;
-        margin: 6px 0 4px 0;
-    }
+  .note-node-content h3 {
+    font-size: 15px;
+    font-weight: bold;
+    margin: 6px 0 4px 0;
+  }
 
-    .note-node-content p {
-        margin: 4px 0;
-    }
+  .note-node-content p {
+    margin: 4px 0;
+  }
 
-    .note-node-content ul,
-    .note-node-content ol {
-        margin: 4px 0;
-        padding-left: 18px;
-    }
+  .note-node-content ul,
+  .note-node-content ol {
+    margin: 4px 0;
+    padding-left: 18px;
+  }
 
-    .note-node-content li {
-        margin: 2px 0;
-    }
+  .note-node-content li {
+    margin: 2px 0;
+  }
 
-    .note-node-content code {
-        background: rgba(0, 0, 0, 0.08);
-        padding: 2px 5px;
-        border-radius: 2px;
-        font-family: monospace;
-        font-size: 13px;
-    }
+  .note-node-content code {
+    background: rgba(0, 0, 0, 0.08);
+    padding: 2px 5px;
+    border-radius: 2px;
+    font-family: monospace;
+    font-size: 13px;
+  }
 
-    .note-node-content pre {
-        background: rgba(0, 0, 0, 0.08);
-        padding: 3px;
-        border-radius: 2px;
-        overflow-x: auto;
-        margin: 2px 0;
-    }
+  .note-node-content pre {
+    background: rgba(0, 0, 0, 0.08);
+    padding: 3px;
+    border-radius: 2px;
+    overflow-x: auto;
+    margin: 2px 0;
+  }
 
-    .note-node-content pre code {
-        background: none;
-        padding: 0;
-    }
+  .note-node-content pre code {
+    background: none;
+    padding: 0;
+  }
 
-    .note-node-content a {
-        color: #0066cc;
-        text-decoration: underline;
-    }
+  .note-node-content a {
+    color: #0066cc;
+    text-decoration: underline;
+  }
 
-    .note-node-content blockquote {
-        border-left: 2px solid #ccc;
-        margin: 2px 0;
-        padding-left: 6px;
-        color: #666;
-        font-style: italic;
-    }
+  .note-node-content blockquote {
+    border-left: 2px solid #ccc;
+    margin: 2px 0;
+    padding-left: 6px;
+    color: #666;
+    font-style: italic;
+  }
 
-    /*
+  /*
        CSS Hiding Logic for Sticky Note
        Hide Node-RED's default label text, icons, etc.
     */
-    g.note-hidden-content text,
-    g.note-hidden-content .node_icon_group,
-    g.note-hidden-content .node_icon,
-    g.note-hidden-content image {
-        display: none !important;
-        visibility: hidden !important;
-    }
-
-    /* Ensure our specific overlay is always visible even if we get aggressive */
-    g.note-hidden-content>.note-overlay {
-        display: block !important;
-    }
+  g.note-hidden-content text,
+  g.note-hidden-content .node_icon_group,
+  g.note-hidden-content .node_icon,
+  g.note-hidden-content image {
+    display: none !important;
+    visibility: hidden !important;
+  }
 </style>
