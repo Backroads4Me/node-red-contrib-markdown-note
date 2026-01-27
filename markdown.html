@@ -47,7 +47,7 @@
             // Reposition node after Node-RED finishes its layout
             var node = this;
             if (node._noteTopY !== undefined) {
-                setTimeout(function() {
+                setTimeout(function () {
                     // Re-render to get correct height
                     renderNoteNode(node);
 
@@ -96,7 +96,7 @@
 
     RED.events.on("view:redraw", function () {
         // Multiple renders to catch any delayed sizing
-        [50, 150, 400].forEach(function(delay) {
+        [50, 150, 400].forEach(function (delay) {
             setTimeout(function () {
                 RED.nodes.eachNode(function (node) {
                     if (node.type === "note") {
@@ -150,11 +150,34 @@
 
         // Pre-process content: convert single newlines to markdown line breaks
         // In markdown, single \n doesn't create a line break - need "  \n" (two spaces + newline)
-        // This ensures the rendered output matches the line count used for node sizing
-        var content = (node.content || '').replace(/\n/g, '  \n');
+        // 
+        // CRITICAL FIX: We also need to PRESERVE blank lines (empty lines).
+        // Standard markdown often collapses consecutive blank lines.
+        // We replace empty or whitespace-only lines with a Non-Breaking Space (\u00A0).
+        // This forces the renderer to draw a line of height, which in turn
+        // allows the node to resize correctly for "visual" blank space.
+
+        var rawContent = node.content || '';
+
+        // 1. Sanitize FIRST so we don't accidentally escape our injection or leave an opening for injection
+        var sanitized = RED.utils.sanitize(rawContent);
+
+        // 2. Split into lines
+        var lines = sanitized.split('\n');
+
+        // 3. Process each line: if empty/whitespace, replace with &nbsp; (unicode \u00A0)
+        var processedLines = lines.map(function (line) {
+            if (!line.trim()) {
+                return '\u00A0';
+            }
+            return line;
+        });
+
+        // 4. Join back with markdown hard break (space space newline)
+        var finalMarkdown = processedLines.join('  \n');
 
         // Render markdown to HTML
-        var html = RED.utils.renderMarkdown(RED.utils.sanitize(content));
+        var html = RED.utils.renderMarkdown(finalMarkdown);
 
         // Create foreignObject to hold the HTML content
         var fo = g.append("foreignObject")
@@ -176,12 +199,21 @@
         var contentNode = contentDiv.node();
         if (contentNode) {
             // Minimum height of one line (14px font * 1.5 line-height + padding)
+            // Minimum height of one line (14px font * 1.5 line-height + padding)
             var minHeight = 28;
             var actualHeight = Math.max(contentNode.scrollHeight + (inset * 2), minHeight);
 
             // Use the smaller of Node-RED's allocation or our measured height
-            var finalHeight = Math.min(actualHeight, h);
-            finalHeight = Math.max(finalHeight, minHeight);
+            // SNAP TO GRID: Round up to nearest 40px (double grid size)
+            // Node-RED nodes align to center.
+            // Height 20px (1 unit) -> top edge is at -10px (mid-grid).
+            // Height 40px (2 units) -> top edge is at -20px (on-grid).
+            // To ensure consistent edge alignment, we enforce 40px increments.
+            var snappedHeight = Math.ceil(actualHeight / 40) * 40;
+
+            // Ensure we at least have the minimum height (snapped)
+            // We use snappedHeight directly to allow expansion beyond initial 'h'
+            var finalHeight = Math.max(snappedHeight, Math.ceil(minHeight / 40) * 40);
 
             // Track top edge position to anchor the node
             // If this is first render OR user has moved the node, recalculate anchor
