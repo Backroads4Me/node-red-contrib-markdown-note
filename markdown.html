@@ -109,6 +109,39 @@
     }, 100);
   });
 
+  // Re-render when switching flow tabs
+  RED.events.on("workspace:change", function () {
+    setTimeout(function () {
+      RED.nodes.eachNode(function (node) {
+        if (node.type === "note") {
+          renderNoteNode(node);
+        }
+      });
+    }, 150);
+  });
+
+  // Render all notes when flows are loaded (initial page load / import)
+  RED.events.on("flows:loaded", function () {
+    setTimeout(function () {
+      RED.nodes.eachNode(function (node) {
+        if (node.type === "note") {
+          renderNoteNode(node);
+        }
+      });
+    }, 200);
+  });
+
+  // Fallback: render any existing notes after short delay on script load
+  setTimeout(function () {
+    if (RED.nodes && RED.nodes.eachNode) {
+      RED.nodes.eachNode(function (node) {
+        if (node.type === "note") {
+          renderNoteNode(node);
+        }
+      });
+    }
+  }, 500);
+
   function renderNoteNode(node) {
     var nodeEl = document.getElementById(node.id);
     if (!nodeEl) return;
