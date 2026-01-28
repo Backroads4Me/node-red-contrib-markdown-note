@@ -63,3 +63,11 @@ npm install node-red-contrib-markdown-note
 ```
 
 Then restart Node-RED.
+
+---
+## Support the Project
+
+Markdown Note is free and open source.  
+If it has helped you or saved you time, consider supporting continued development:
+
+[GitHub Sponsors](https://github.com/sponsors/Backroads4Me)
