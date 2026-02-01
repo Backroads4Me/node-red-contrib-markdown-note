@@ -1,8 +1,9 @@
 <script type="text/javascript">
   RED.nodes.registerType("note", {
-    category: "common",
+    category: "utility",
     color: "#F3E5AB",
     defaults: {
+      name: { value: "" },
       content: { value: "" },
     },
     inputs: 0,
@@ -40,10 +41,12 @@
       this.editor.focus();
     },
     oneditsave: function () {
-      this.content = this.editor.getValue();
-      $("#node-input-content").val(this.content);
-      this.editor.destroy();
-      delete this.editor;
+      if (this.editor) {
+        this.content = this.editor.getValue();
+        $("#node-input-content").val(this.content);
+        this.editor.destroy();
+        delete this.editor;
+      }
 
       // Reposition node after Node-RED finishes its layout
       var node = this;
@@ -62,8 +65,10 @@
       }
     },
     oneditcancel: function () {
-      this.editor.destroy();
-      delete this.editor;
+      if (this.editor) {
+        this.editor.destroy();
+        delete this.editor;
+      }
     },
     oneditresize: function (size) {
       var rows = $("#dialog-form>div:not(.node-text-editor-row)");
@@ -145,6 +150,11 @@
   function renderNoteNode(node) {
     var nodeEl = document.getElementById(node.id);
     if (!nodeEl) return;
+
+    // Guard against undocumented Node-RED internals
+    if (typeof node.h !== "number" || typeof node.y !== "number") {
+      return;
+    }
 
     var g = d3.select(nodeEl);
 
@@ -296,12 +306,11 @@
     <li><b>Links:</b> [text](url)</li>
     <li><b>Quote:</b> > text</li>
   </ul>
-
 </script>
 
 <style>
   /* Markdown content rendered inside the node */
-  .note-node-content {
+  g.note-hidden-content .note-node-content {
     font-size: 14px;
     line-height: 1.5;
     color: #333;
@@ -312,7 +321,7 @@
     border-radius: 4px;
   }
 
-  .note-node-content h1 {
+  g.note-hidden-content .note-node-content h1 {
     font-size: 18px;
     font-weight: bold;
     margin: 0 0 8px 0;
@@ -320,33 +329,33 @@
     padding-bottom: 4px;
   }
 
-  .note-node-content h2 {
+  g.note-hidden-content .note-node-content h2 {
     font-size: 16px;
     font-weight: bold;
     margin: 8px 0 6px 0;
   }
 
-  .note-node-content h3 {
+  g.note-hidden-content .note-node-content h3 {
     font-size: 15px;
     font-weight: bold;
     margin: 6px 0 4px 0;
   }
 
-  .note-node-content p {
+  g.note-hidden-content .note-node-content p {
     margin: 4px 0;
   }
 
-  .note-node-content ul,
-  .note-node-content ol {
+  g.note-hidden-content .note-node-content ul,
+  g.note-hidden-content .note-node-content ol {
     margin: 4px 0;
     padding-left: 18px;
   }
 
-  .note-node-content li {
+  g.note-hidden-content .note-node-content li {
     margin: 2px 0;
   }
 
-  .note-node-content code {
+  g.note-hidden-content .note-node-content code {
     background: rgba(0, 0, 0, 0.08);
     padding: 2px 5px;
     border-radius: 2px;
@@ -354,7 +363,7 @@
     font-size: 13px;
   }
 
-  .note-node-content pre {
+  g.note-hidden-content .note-node-content pre {
     background: rgba(0, 0, 0, 0.08);
     padding: 3px;
     border-radius: 2px;
@@ -362,17 +371,17 @@
     margin: 2px 0;
   }
 
-  .note-node-content pre code {
+  g.note-hidden-content .note-node-content pre code {
     background: none;
     padding: 0;
   }
 
-  .note-node-content a {
+  g.note-hidden-content .note-node-content a {
     color: #0066cc;
     text-decoration: underline;
   }
 
-  .note-node-content blockquote {
+  g.note-hidden-content .note-node-content blockquote {
     border-left: 2px solid #ccc;
     margin: 2px 0;
     padding-left: 6px;
