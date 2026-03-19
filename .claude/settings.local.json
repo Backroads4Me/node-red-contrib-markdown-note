@@ -7,7 +7,10 @@
       "WebSearch",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:discourse.nodered.org)"
+      "WebFetch(domain:discourse.nodered.org)",
+      "Read(//c/Users/deremer/.node-red//**)",
+      "Read(//c/Users/deremer/.node-red/**)",
+      "Bash(npm link:*)"
     ]
   }
 }

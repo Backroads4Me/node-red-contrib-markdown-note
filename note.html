@@ -5,6 +5,8 @@
     defaults: {
       name: { value: "" },
       content: { value: "" },
+      bgcolor: { value: "#F3E5AB" },
+      textcolor: { value: "#333333" },
     },
     inputs: 0,
     outputs: 0,
@@ -170,6 +172,11 @@
     if (rect.empty()) rect = g.select("rect");
     if (rect.empty()) return;
 
+    // Apply custom background color to the node rect
+    var bgcolor = node.bgcolor || "#F3E5AB";
+    var textcolor = node.textcolor || "#333333";
+    rect.style("fill", bgcolor);
+
     var bbox = rect.node().getBBox();
     var w = bbox.width;
     var h = bbox.height;
@@ -226,6 +233,8 @@
       .attr("xmlns", "http://www.w3.org/1999/xhtml")
       .style("width", w - inset * 2 + "px")
       .style("overflow", "hidden")
+      .style("background", bgcolor)
+      .style("color", textcolor)
       .html(html);
 
     // Measure actual content height and resize node to fit
@@ -276,6 +285,14 @@
 </script>
 
 <script type="text/html" data-template-name="note">
+  <div class="form-row">
+    <label for="node-input-bgcolor" style="width:120px;">Background</label>
+    <input type="color" id="node-input-bgcolor" style="width:60px; height:28px; padding:1px; cursor:pointer;" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-textcolor" style="width:120px;">Text Color</label>
+    <input type="color" id="node-input-textcolor" style="width:60px; height:28px; padding:1px; cursor:pointer;" />
+  </div>
   <div class="form-row node-text-editor-row">
     <input type="hidden" id="node-input-content" />
     <div
@@ -313,11 +330,9 @@
   g.note-hidden-content .note-node-content {
     font-size: 14px;
     line-height: 1.5;
-    color: #333;
     font-family:
       -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     padding: 0 8px;
-    background: #f3e5ab;
     border-radius: 4px;
   }
 
