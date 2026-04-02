@@ -20,15 +20,11 @@
     oneditprepare: function () {
       var content = this.content || "";
 
-      // Capture top-left anchor position before editing
-      // This ensures the node stays in place after edits
-      if (
-        this._noteTopY === undefined &&
-        this.y !== undefined &&
-        this.h !== undefined
-      ) {
+      // Capture the current top edge before editing so content-driven
+      // height changes can keep the note visually anchored.
+      if (this.y !== undefined && this.h !== undefined) {
         this._noteTopY = this.y - this.h / 2;
-        this._noteLastY = this.y;
+        this._notePreserveTopOnNextRender = true;
       }
 
       // Create the ACE editor with markdown mode
@@ -48,19 +44,15 @@
         delete this.editor;
       }
 
-      // Reposition node after Node-RED finishes its layout
+      // Re-render after Node-RED finishes its layout so the content height is
+      // measured from the updated markdown.
       var node = this;
-      if (node._noteTopY !== undefined) {
+      if (
+        node._noteTopY !== undefined &&
+        node._notePreserveTopOnNextRender === true
+      ) {
         setTimeout(function () {
-          // Re-render to get correct height
           renderNoteNode(node);
-
-          // Anchor top edge
-          if (node.h !== undefined) {
-            node.y = node._noteTopY + node.h / 2;
-            node._noteLastY = node.y;
-            RED.view.redraw(true);
-          }
         }, 0);
       }
     },
@@ -69,6 +61,7 @@
         this.editor.destroy();
         delete this.editor;
       }
+      this._notePreserveTopOnNextRender = false;
     },
     oneditresize: function (size) {
       var rows = $("#dialog-form>div:not(.node-text-editor-row)");
@@ -249,25 +242,17 @@
       // We use snappedHeight directly to allow expansion beyond initial 'h'
       var finalHeight = Math.max(snappedHeight, Math.ceil(minHeight / 40) * 40);
 
-      // Track top edge position to anchor the node
-      // If this is first render OR user has moved the node, recalculate anchor
-      var currentTopY = node.y - h / 2;
-      if (node._noteTopY === undefined || node._noteLastY === undefined) {
-        // First time: store current top edge as anchor
-        node._noteTopY = currentTopY;
-      } else if (Math.abs(node.y - node._noteLastY) > 1) {
-        // User moved the node - update anchor
-        node._noteTopY = currentTopY;
-      }
-
-      // Set y so top edge stays at _noteTopY
-      var newY = node._noteTopY + finalHeight / 2;
-      node.y = newY;
-      node._noteLastY = newY;
-
       rect.attr("height", finalHeight);
       fo.attr("height", finalHeight - inset * 2);
       contentDiv.style("height", finalHeight - inset * 2 + "px");
+
+      if (
+        node._notePreserveTopOnNextRender === true &&
+        typeof node._noteTopY === "number"
+      ) {
+        node.y = node._noteTopY + finalHeight / 2;
+        node._notePreserveTopOnNextRender = false;
+      }
 
       // Update Node-RED's internal dimensions
       node.h = finalHeight;
