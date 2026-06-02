@@ -1,10 +1,13 @@
 <script type="text/javascript">
   RED.nodes.registerType("note", {
     category: "common",
+    // Palette/pre-render color only; per-node color is applied in renderNoteNode.
     color: "#F3E5AB",
     defaults: {
       name: { value: "" },
       content: { value: "" },
+      bgcolor: { value: "#F3E5AB" },
+      textcolor: { value: "#333333" },
     },
     inputs: 0,
     outputs: 0,
@@ -19,6 +22,20 @@
 
     oneditprepare: function () {
       var content = this.content || "";
+      var defaultBgColor = "#F3E5AB";
+      var defaultTextColor = "#333333";
+      var normalizeColor = function (value, fallback) {
+        return /^#[0-9a-fA-F]{6}$/.test(value || "") ? value : fallback;
+      };
+
+      $("#node-input-bgcolor").val(normalizeColor(this.bgcolor, defaultBgColor));
+      $("#node-input-textcolor").val(
+        normalizeColor(this.textcolor, defaultTextColor),
+      );
+      $("#node-input-reset-colors").off("click").on("click", function () {
+        $("#node-input-bgcolor").val(defaultBgColor);
+        $("#node-input-textcolor").val(defaultTextColor);
+      });
 
       // Capture the current top edge before editing so content-driven
       // height changes can keep the note visually anchored.
@@ -43,6 +60,8 @@
         this.editor.destroy();
         delete this.editor;
       }
+      this.bgcolor = $("#node-input-bgcolor").val() || "#F3E5AB";
+      this.textcolor = $("#node-input-textcolor").val() || "#333333";
 
       // Re-render after Node-RED finishes its layout so the content height is
       // measured from the updated markdown.
@@ -163,6 +182,12 @@
     if (rect.empty()) rect = g.select("rect");
     if (rect.empty()) return;
 
+    var bgcolor = node.bgcolor || "#F3E5AB";
+    var textcolor = node.textcolor || "#333333";
+    // Keep the rect fill in sync so the 1px inset shows the selected color
+    // around the foreignObject overlay and before the overlay renders.
+    rect.style("fill", bgcolor);
+
     var bbox = rect.node().getBBox();
     var w = bbox.width;
     var h = bbox.height;
@@ -219,6 +244,8 @@
       .attr("xmlns", "http://www.w3.org/1999/xhtml")
       .style("width", w - inset * 2 + "px")
       .style("overflow", "hidden")
+      .style("background", bgcolor)
+      .style("color", textcolor)
       .html(html);
 
     // Measure actual content height and resize node to fit
@@ -261,6 +288,13 @@
 </script>
 
 <script type="text/html" data-template-name="note">
+  <div class="form-row note-color-row">
+    <label for="node-input-bgcolor">Background</label>
+    <input type="color" id="node-input-bgcolor" style="width:60px; height:28px; padding:1px; cursor:pointer;" />
+    <label for="node-input-textcolor">Text</label>
+    <input type="color" id="node-input-textcolor" style="width:60px; height:28px; padding:1px; cursor:pointer;" />
+    <button type="button" id="node-input-reset-colors" class="red-ui-button">Reset</button>
+  </div>
   <div class="form-row node-text-editor-row">
     <input type="hidden" id="node-input-content" />
     <div
@@ -294,15 +328,35 @@
 </script>
 
 <style>
+  .note-color-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .form-row.note-color-row label {
+    width: auto !important;
+    min-width: 0;
+    margin-right: 6px;
+    margin-bottom: 0;
+  }
+
+  .note-color-row input[type="color"] {
+    flex: 0 0 auto;
+    margin-right: 16px;
+  }
+
+  .note-color-row button {
+    margin-left: 16px;
+  }
+
   /* Markdown content rendered inside the node */
   g.note-hidden-content .note-node-content {
     font-size: 14px;
     line-height: 1.5;
-    color: #333;
     font-family:
       -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     padding: 0 8px;
-    background: #f3e5ab;
     border-radius: 4px;
   }
 
@@ -310,7 +364,7 @@
     font-size: 18px;
     font-weight: bold;
     margin: 0 0 8px 0;
-    border-bottom: 1px solid #ccc;
+    border-bottom: 1px solid currentColor;
     padding-bottom: 4px;
   }
 
@@ -342,6 +396,7 @@
 
   g.note-hidden-content .note-node-content code {
     background: rgba(0, 0, 0, 0.08);
+    color: inherit;
     padding: 2px 5px;
     border-radius: 2px;
     font-family: monospace;
@@ -367,10 +422,9 @@
   }
 
   g.note-hidden-content .note-node-content blockquote {
-    border-left: 2px solid #ccc;
+    border-left: 2px solid currentColor;
     margin: 2px 0;
     padding-left: 6px;
-    color: #666;
     font-style: italic;
   }
 
