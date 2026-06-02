@@ -23,6 +23,7 @@ The standard Comment node hides content by default. Markdown Note keeps your not
 |---------|-------------|---------------|
 | Visibility | Collapsed by default | Always visible |
 | Formatting | Plain text | Markdown (headers, lists, code, blockquotes) |
+| Colors | Fixed editor style | Custom background and text colors |
 | Structure | Minimal | Suitable for detailed documentation |
 
 ---
@@ -31,6 +32,7 @@ The standard Comment node hides content by default. Markdown Note keeps your not
 
 - **Always-visible notes** – No need to click to expand.  
 - **Markdown rendering** – Support for headers, lists, emphasis, code blocks, quotes.  
+- **Custom colors** – Choose the note background and text color from the node properties.
 - **Task lists** – Track TODOs or action items inline.  
 - **Resizable & readable layout** – Automatically adjusts to content size.  
 - **Developer-focused** – Document payload formats, API contracts, assumptions, or edge cases directly on the flow.  
