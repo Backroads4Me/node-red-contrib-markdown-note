@@ -39,9 +39,9 @@ The standard Comment node hides content by default. Markdown Note keeps your not
 
 ---
 
-## Known Issues
+## Limitations
 
-- **Links are not clickable**: Due to Node-RED's security restrictions on SVG content in the flow editor, hyperlinks rendered in the markdown cannot be clicked.
+- Links are rendered as text but are not clickable due to Node-RED editor restrictions on SVG content.
 
 ---
 
@@ -69,6 +69,10 @@ Then restart Node-RED.
 ## Support
 
 Markdown Note is free and open source.  
-If it has helped you or saved you time, you can support continued maintenance here:
 
-[GitHub Sponsors](https://github.com/sponsors/Backroads4Me)
+If it helped you document your flows, please star the repository so other Node-RED users can find it.
+
+Sponsorships are appreciated, but never expected.
+
+[![Star Repository](https://img.shields.io/badge/%E2%AD%90%20Star%20this%20Repo-GitHub-lightgrey?logo=github&logoColor=black)](https://github.com/Backroads4Me/node-red-contrib-markdown-note)
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Backroads4Me)
