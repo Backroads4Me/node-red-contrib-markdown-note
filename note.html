@@ -13,11 +13,7 @@
     outputs: 0,
     icon: "font-awesome/fa-file-text-o",
     label: function () {
-      // Convert actual newlines to literal \n that Node-RED interprets as line breaks
-      if (this.content) {
-        return this.content.replace(/\n/g, "\\n ");
-      }
-      return "note";
+      return getNoteLabel(this);
     },
 
     oneditprepare: function () {
@@ -37,14 +33,6 @@
         $("#node-input-textcolor").val(defaultTextColor);
       });
 
-      // Capture the current top edge before editing so content-driven
-      // height changes can keep the note visually anchored.
-      if (this.y !== undefined && this.h !== undefined) {
-        this._noteTopY = this.y - this.h / 2;
-        this._notePreserveTopOnNextRender = true;
-      }
-
-      // Create the ACE editor with markdown mode
       this.editor = RED.editor.createEditor({
         id: "node-input-content-editor",
         mode: "ace/mode/markdown",
@@ -63,24 +51,20 @@
       this.bgcolor = $("#node-input-bgcolor").val() || "#F3E5AB";
       this.textcolor = $("#node-input-textcolor").val() || "#333333";
 
-      // Re-render after Node-RED finishes its layout so the content height is
-      // measured from the updated markdown.
       var node = this;
-      if (
-        node._noteTopY !== undefined &&
-        node._notePreserveTopOnNextRender === true
-      ) {
-        setTimeout(function () {
+      premeasurePendingNote(node);
+      hideNoteUntilRendered(node);
+      setTimeout(function () {
+        if (node._noteRenderPending) {
           renderNoteNode(node);
-        }, 0);
-      }
+        }
+      }, 300);
     },
     oneditcancel: function () {
       if (this.editor) {
         this.editor.destroy();
         delete this.editor;
       }
-      this._notePreserveTopOnNextRender = false;
     },
     oneditresize: function (size) {
       var rows = $("#dialog-form>div:not(.node-text-editor-row)");
@@ -97,7 +81,6 @@
     },
   });
 
-  // Render markdown content inside nodes on the workspace
   RED.events.on("nodes:add", function (node) {
     if (node.type === "note") {
       setTimeout(function () {
@@ -108,15 +91,23 @@
 
   RED.events.on("nodes:change", function (node) {
     if (node.type === "note") {
-      // Delay to allow Node-RED to recalculate size
-      setTimeout(function () {
-        renderNoteNode(node);
-      }, 100);
+      if (node._noteRenderPending) {
+        preparePendingNodeForNodeRedRedraw(node);
+      }
+      requestAnimationFrame(function () {
+        if (node._noteRenderPending) {
+          renderNoteNode(node, true);
+          requestAnimationFrame(function () {
+            renderNoteNode(node);
+          });
+        } else {
+          renderNoteNode(node);
+        }
+      });
     }
   });
 
   RED.events.on("view:redraw", function () {
-    // Single redraw after view settles
     setTimeout(function () {
       RED.nodes.eachNode(function (node) {
         if (node.type === "note") {
@@ -126,7 +117,6 @@
     }, 100);
   });
 
-  // Re-render when switching flow tabs
   RED.events.on("workspace:change", function () {
     setTimeout(function () {
       RED.nodes.eachNode(function (node) {
@@ -137,7 +127,6 @@
     }, 150);
   });
 
-  // Render all notes when flows are loaded (initial page load / import)
   RED.events.on("flows:loaded", function () {
     setTimeout(function () {
       RED.nodes.eachNode(function (node) {
@@ -148,7 +137,6 @@
     }, 200);
   });
 
-  // Fallback: render any existing notes after short delay on script load
   setTimeout(function () {
     if (RED.nodes && RED.nodes.eachNode) {
       RED.nodes.eachNode(function (node) {
@@ -159,130 +147,360 @@
     }
   }, 500);
 
-  function renderNoteNode(node) {
+  function hideNoteUntilRendered(node) {
+    node._noteRenderPending = true;
+    applyPendingHideRule(node);
+
+    var nodeEl = document.getElementById(node.id);
+    if (nodeEl) {
+      var g = d3.select(nodeEl);
+      if (
+        typeof node._noteLeftX !== "number" ||
+        typeof node._noteTopY !== "number" ||
+        typeof node._noteLastW !== "number" ||
+        typeof node._noteLastH !== "number"
+      ) {
+        captureVisibleNoteGeometry(node);
+      }
+
+      g
+        .classed("note-render-pending", true)
+        .style("visibility", "hidden");
+    }
+  }
+
+  function cssAttributeEscape(value) {
+    return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
+  function applyPendingHideRule(node) {
+    removePendingHideRule(node);
+
+    var style = document.createElement("style");
+    style.type = "text/css";
+    style.textContent =
+      'g[id="' +
+      cssAttributeEscape(node.id) +
+      '"] { visibility: hidden !important; }';
+    document.head.appendChild(style);
+    node._notePendingHideStyle = style;
+  }
+
+  function removePendingHideRule(node) {
+    if (node._notePendingHideStyle && node._notePendingHideStyle.parentNode) {
+      node._notePendingHideStyle.parentNode.removeChild(node._notePendingHideStyle);
+    }
+    delete node._notePendingHideStyle;
+  }
+
+  function preparePendingNodeForNodeRedRedraw(node) {
+    if (
+      typeof node._noteLeftX === "number" &&
+      typeof node._noteTopY === "number" &&
+      typeof node._noteLastW === "number" &&
+      typeof node._noteLastH === "number"
+    ) {
+      node.w = node._noteLastW;
+      node.h = node._noteLastH;
+      node.x = node._noteLeftX + node.w / 2;
+      node.y = node._noteTopY + node.h / 2;
+    }
+    node.resize = false;
+    applyStableNodeGeometry(node);
+  }
+
+  function applyStableNodeGeometry(node) {
     var nodeEl = document.getElementById(node.id);
     if (!nodeEl) return;
 
-    // Guard against undocumented Node-RED internals
-    if (typeof node.h !== "number" || typeof node.y !== "number") {
-      return;
+    var g = d3.select(nodeEl);
+    if (typeof node._noteLeftX === "number" && typeof node._noteTopY === "number") {
+      g.attr("transform", "translate(" + node._noteLeftX + "," + node._noteTopY + ")");
     }
 
-    var g = d3.select(nodeEl);
-
-    // Clear any previous custom content FIRST
-    g.selectAll(".note-overlay").remove();
-
-    // CSS-BASED HIDING: Apply class to parent group
-    g.classed("note-hidden-content", true);
-
-    // Get the node's main rect to determine size
     var rect = g.select("rect.node");
-    // Fallback if class .node doesn't exist
     if (rect.empty()) rect = g.select("rect");
-    if (rect.empty()) return;
+    if (!rect.empty()) {
+      if (typeof node.w === "number") {
+        rect.attr("width", node.w);
+      }
+      if (typeof node.h === "number") {
+        rect.attr("height", node.h);
+      }
+    }
+  }
 
-    var bgcolor = node.bgcolor || "#F3E5AB";
-    var textcolor = node.textcolor || "#333333";
-    // Keep the rect fill in sync so the 1px inset shows the selected color
-    // around the foreignObject overlay and before the overlay renders.
-    rect.style("fill", bgcolor);
-
-    var bbox = rect.node().getBBox();
-    var w = bbox.width;
-    var h = bbox.height;
-
-    // INSET: Render overlay slightly smaller than rect to reveal the border stroke
-    // Node-RED standard nodes have rounded corners.
-    // By insetting 1px, we sit "inside" the stroke.
-    var inset = 1;
-
-    // Pre-process content: convert single newlines to markdown line breaks
-    // In markdown, single \n doesn't create a line break - need "  \n" (two spaces + newline)
-    //
-    // We also need to preserve blank lines intentionally entered.
-    // Standard markdown often collapses consecutive blank lines.
-    // We replace empty or whitespace-only lines with a Non-Breaking Space (\u00A0).
-    // This forces the renderer to draw a line of height, which in turn
-    // allows the node to resize correctly for "visual" blank space.
-
-    var rawContent = node.content || "";
-
-    // Sanitize FIRST so we don't accidentally escape our injection or leave an opening for injection
-    var sanitized = RED.utils.sanitize(rawContent);
-
-    // Split into lines
+  function processMarkdownContent(rawContent) {
+    var sanitized = RED.utils.sanitize(rawContent || "");
     var lines = sanitized.split("\n");
-
-    // Process each line: if empty/whitespace, replace with &nbsp; (unicode \u00A0)
     var processedLines = lines.map(function (line) {
       if (!line.trim()) {
         return "\u00A0";
       }
       return line;
     });
+    return processedLines.join("  \n");
+  }
 
-    // Join back with markdown hard break (space space newline)
-    var finalMarkdown = processedLines.join("  \n");
+  function getNoteLabel(node) {
+    var label = node.content ? node.content.replace(/\n/g, "\\n ") : "note";
+    var targetHeight = node._noteLabelTargetH;
+    if (typeof targetHeight !== "number") {
+      return label;
+    }
 
-    // Render markdown to HTML
-    var html = RED.utils.renderMarkdown(finalMarkdown);
+    var lineCount = getNoteLabelLineCount(node);
+    var targetLineCount = Math.max(1, Math.ceil((targetHeight - 6) / 24));
+    var paddingLines = targetLineCount - lineCount;
+    while (paddingLines > 0) {
+      label += "\\n ";
+      paddingLines--;
+    }
+    return label;
+  }
 
-    // Create foreignObject to hold the HTML content
-    var fo = g
-      .append("foreignObject")
-      .attr("class", "note-overlay")
-      .attr("x", inset)
-      .attr("y", inset)
-      .attr("width", w - inset * 2)
-      .attr("height", h - inset * 2)
-      .attr("pointer-events", "none");
+  function getNoteLabelLineCount(node) {
+    var label = node.content ? node.content.replace(/\n/g, "\\n ") : "note";
+    return label.split(/\\n /).length;
+  }
 
-    var contentDiv = fo
-      .append("xhtml:div")
-      .attr("class", "note-node-content")
-      .attr("xmlns", "http://www.w3.org/1999/xhtml")
-      .style("width", w - inset * 2 + "px")
-      .style("overflow", "hidden")
-      .style("background", bgcolor)
-      .style("color", textcolor)
-      .html(html);
+  function getNoteLabelLines(node) {
+    var label = node.content ? node.content.replace(/\n/g, "\\n ") : "note";
+    return label.split(/\\n /).map(function (line) {
+      return line.trim();
+    });
+  }
 
-    // Measure actual content height and resize node to fit
-    var contentNode = contentDiv.node();
-    if (contentNode) {
-      // Minimum height of one line (14px font * 1.5 line-height + padding)
-      var minHeight = 28;
-      var actualHeight = Math.max(
-        contentNode.scrollHeight + inset * 2,
-        minHeight,
-      );
+  function getNodeRedCompatibleHeight(actualHeight, node) {
+    var measuredLineCount = Math.max(1, Math.ceil((actualHeight - 6) / 24));
+    var contentLineCount = node ? getNoteLabelLineCount(node) : 1;
+    var lineCount = Math.max(measuredLineCount, contentLineCount);
+    return Math.max(6 + 24 * lineCount, 30);
+  }
 
-      // Use the smaller of Node-RED's allocation or our measured height
-      // SNAP TO GRID: Round up to nearest 40px (double grid size)
-      // Node-RED nodes align to center.
-      // Height 20px (1 unit) -> top edge is at -10px (mid-grid).
-      // Height 40px (2 units) -> top edge is at -20px (on-grid).
-      // To ensure consistent edge alignment, we enforce 40px increments.
-      var snappedHeight = Math.ceil(actualHeight / 40) * 40;
+  function measureNodeRedLabelWidth(node) {
+    var target = document.getElementById("red-ui-editor") || document.body;
+    var measure = document.createElement("span");
+    measure.className = "red-ui-flow-node-label";
+    measure.style.position = "absolute";
+    measure.style.left = "-10000px";
+    measure.style.top = "-10000px";
+    measure.style.visibility = "hidden";
+    target.appendChild(measure);
 
-      // We use snappedHeight directly to allow expansion beyond initial 'h'
-      var finalHeight = Math.max(snappedHeight, Math.ceil(minHeight / 40) * 40);
+    var maxWidth = 0;
+    getNoteLabelLines(node).forEach(function (line) {
+      measure.textContent = line || "";
+      maxWidth = Math.max(maxWidth, measure.offsetWidth);
+    });
+    measure.parentNode.removeChild(measure);
+    return maxWidth;
+  }
 
-      rect.attr("height", finalHeight);
-      fo.attr("height", finalHeight - inset * 2);
-      contentDiv.style("height", finalHeight - inset * 2 + "px");
+  function getNodeRedCompatibleWidth(node) {
+    var labelWidth = measureNodeRedLabelWidth(node);
+    return Math.max(100, 20 * Math.ceil((labelWidth + 50) / 20));
+  }
 
-      if (
-        node._notePreserveTopOnNextRender === true &&
-        typeof node._noteTopY === "number"
-      ) {
-        node.y = node._noteTopY + finalHeight / 2;
-        node._notePreserveTopOnNextRender = false;
+  function premeasurePendingNote(node) {
+    captureVisibleNoteGeometry(node);
+
+    var inset = 1;
+    var width = getNodeRedCompatibleWidth(node);
+    var measure = document.createElement("div");
+    measure.className = "note-node-content note-measure-content";
+    measure.style.position = "absolute";
+    measure.style.left = "-10000px";
+    measure.style.top = "-10000px";
+    measure.style.visibility = "hidden";
+    measure.style.width = width - inset * 2 + "px";
+    measure.style.overflow = "hidden";
+    measure.style.pointerEvents = "none";
+    measure.innerHTML = RED.utils.renderMarkdown(processMarkdownContent(node.content));
+    document.body.appendChild(measure);
+
+    var minHeight = 28;
+    var actualHeight = Math.max(measure.scrollHeight + inset * 2, minHeight);
+    var finalHeight = getNodeRedCompatibleHeight(actualHeight, node);
+
+    measure.parentNode.removeChild(measure);
+
+    if (typeof node._noteLeftX !== "number") {
+      node._noteLeftX = node.x - width / 2;
+    }
+    if (typeof node._noteTopY !== "number") {
+      node._noteTopY = node.y - node._noteLastH / 2;
+    }
+
+    node.w = width;
+    node.h = finalHeight;
+    node.x = node._noteLeftX + width / 2;
+    node.y = node._noteTopY + finalHeight / 2;
+    node._noteLastW = width;
+    node._noteLastH = finalHeight;
+    node._noteLastX = node.x;
+    node._noteLastY = node.y;
+    node._noteLabelTargetH = finalHeight;
+    node.resize = false;
+    applyStableNodeGeometry(node);
+  }
+
+  function captureVisibleNoteGeometry(node) {
+    var nodeEl = document.getElementById(node.id);
+    if (!nodeEl) return;
+
+    var g = d3.select(nodeEl);
+    var transform = g.attr("transform") || "";
+    var translate = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/.exec(transform);
+    var rect = g.select("rect.node");
+    if (rect.empty()) rect = g.select("rect");
+    if (!rect.empty()) {
+      var bbox = rect.node().getBBox();
+      node._noteLastW = bbox.width;
+      node._noteLastH = bbox.height;
+    }
+    if (translate) {
+      node._noteLeftX = parseFloat(translate[1]);
+      node._noteTopY = parseFloat(translate[2]);
+    }
+    if (
+      typeof node._noteLeftX === "number" &&
+      typeof node._noteTopY === "number" &&
+      typeof node._noteLastW === "number" &&
+      typeof node._noteLastH === "number"
+    ) {
+      node._noteLastX = node._noteLeftX + node._noteLastW / 2;
+      node._noteLastY = node._noteTopY + node._noteLastH / 2;
+    }
+  }
+
+  function renderNoteNode(node, keepHidden) {
+    var nodeEl = document.getElementById(node.id);
+    if (!nodeEl) return;
+
+    var g = d3.select(nodeEl);
+    var restoreVisibility = function () {
+      if (node._noteRenderPending && !keepHidden) {
+        g.classed("note-render-pending", false).style("visibility", null);
+        removePendingHideRule(node);
+        node._noteRenderPending = false;
+      }
+    };
+
+    try {
+      if (node._noteRenderPending) {
+        applyPendingHideRule(node);
+        g.classed("note-render-pending", true).style("visibility", "hidden");
       }
 
-      // Update Node-RED's internal dimensions
-      node.h = finalHeight;
+      if (typeof node.h !== "number" || typeof node.y !== "number") {
+        return;
+      }
+
+      g.selectAll(".note-overlay").remove();
+      g.classed("note-hidden-content", true);
+
+      var rect = g.select("rect.node");
+      if (rect.empty()) rect = g.select("rect");
+      if (rect.empty()) {
+        return;
+      }
+
+      var bgcolor = node.bgcolor || "#F3E5AB";
+      var textcolor = node.textcolor || "#333333";
+      rect.style("fill", bgcolor).style("fill-opacity", 1);
+
+      var bbox = rect.node().getBBox();
+      var w = bbox.width;
+      var inset = 1;
+      var finalMarkdown = processMarkdownContent(node.content || "");
+      var html = RED.utils.renderMarkdown(finalMarkdown);
+
+      var fo = g
+        .append("foreignObject")
+        .attr("class", "note-overlay")
+        .attr("x", inset)
+        .attr("y", inset)
+        .attr("width", w - inset * 2)
+        .attr("height", node.h - inset * 2)
+        .attr("pointer-events", "none");
+
+      var contentDiv = fo
+        .append("xhtml:div")
+        .attr("class", "note-node-content")
+        .attr("xmlns", "http://www.w3.org/1999/xhtml")
+        .style("width", w - inset * 2 + "px")
+        .style("overflow", "hidden")
+        .style("color", textcolor)
+        .html(html);
+
+      var contentNode = contentDiv.node();
+      if (contentNode) {
+        var minHeight = 28;
+        var actualHeight = Math.max(
+          contentNode.scrollHeight + inset * 2,
+          minHeight,
+        );
+        var finalHeight = getNodeRedCompatibleHeight(actualHeight, node);
+
+        rect.attr("height", finalHeight);
+        fo.attr("height", finalHeight - inset * 2);
+        contentDiv.style("height", finalHeight - inset * 2 + "px");
+
+        var currentH =
+          typeof node._noteLastH === "number"
+            ? node._noteLastH
+            : typeof node.h === "number"
+              ? node.h
+              : finalHeight;
+        var currentW =
+          typeof node._noteLastW === "number"
+            ? node._noteLastW
+            : typeof node.w === "number"
+              ? node.w
+              : w;
+
+        var dx =
+          typeof node._noteLastX === "number" ? node.x - node._noteLastX : 0;
+        var dy =
+          typeof node._noteLastY === "number" ? node.y - node._noteLastY : 0;
+        var MOVE_TOLERANCE = 12;
+        var movedX = !node._noteRenderPending && Math.abs(dx) > 0.5;
+        var movedY = !node._noteRenderPending && Math.abs(dy) > MOVE_TOLERANCE;
+
+        if (typeof node._noteTopY !== "number") {
+          node._noteTopY = node.y - currentH / 2;
+        } else if (movedX || movedY) {
+          node._noteTopY = node.y - currentH / 2;
+        }
+
+        if (typeof node._noteLeftX !== "number") {
+          node._noteLeftX = node.x - currentW / 2;
+        } else if (movedX || movedY) {
+          node._noteLeftX = node.x - currentW / 2;
+        }
+
+        node.x = node._noteLeftX + w / 2;
+        node.y = node._noteTopY + finalHeight / 2;
+        node.w = w;
+        node.h = finalHeight;
+        node._noteLastW = w;
+        node._noteLastH = finalHeight;
+        node._noteLastX = node.x;
+        node._noteLastY = node.y;
+        node._noteLabelTargetH = finalHeight;
+
+        var transform = g.attr("transform") || "";
+        var translate = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/.exec(transform);
+        if (translate) {
+          g.attr(
+            "transform",
+            "translate(" + node._noteLeftX + "," + node._noteTopY + ")",
+          );
+        }
+      }
+    } finally {
+      restoreVisibility();
     }
   }
 </script>
@@ -350,8 +568,8 @@
     margin-left: 16px;
   }
 
-  /* Markdown content rendered inside the node */
-  g.note-hidden-content .note-node-content {
+  g.note-hidden-content .note-node-content,
+  .note-measure-content {
     font-size: 14px;
     line-height: 1.5;
     font-family:
@@ -360,7 +578,8 @@
     border-radius: 4px;
   }
 
-  g.note-hidden-content .note-node-content h1 {
+  g.note-hidden-content .note-node-content h1,
+  .note-measure-content h1 {
     font-size: 18px;
     font-weight: bold;
     margin: 0 0 8px 0;
@@ -368,33 +587,40 @@
     padding-bottom: 4px;
   }
 
-  g.note-hidden-content .note-node-content h2 {
+  g.note-hidden-content .note-node-content h2,
+  .note-measure-content h2 {
     font-size: 16px;
     font-weight: bold;
     margin: 8px 0 6px 0;
   }
 
-  g.note-hidden-content .note-node-content h3 {
+  g.note-hidden-content .note-node-content h3,
+  .note-measure-content h3 {
     font-size: 15px;
     font-weight: bold;
     margin: 6px 0 4px 0;
   }
 
-  g.note-hidden-content .note-node-content p {
+  g.note-hidden-content .note-node-content p,
+  .note-measure-content p {
     margin: 4px 0;
   }
 
   g.note-hidden-content .note-node-content ul,
-  g.note-hidden-content .note-node-content ol {
+  g.note-hidden-content .note-node-content ol,
+  .note-measure-content ul,
+  .note-measure-content ol {
     margin: 4px 0;
     padding-left: 18px;
   }
 
-  g.note-hidden-content .note-node-content li {
+  g.note-hidden-content .note-node-content li,
+  .note-measure-content li {
     margin: 2px 0;
   }
 
-  g.note-hidden-content .note-node-content code {
+  g.note-hidden-content .note-node-content code,
+  .note-measure-content code {
     background: rgba(0, 0, 0, 0.08);
     color: inherit;
     padding: 2px 5px;
@@ -403,7 +629,8 @@
     font-size: 13px;
   }
 
-  g.note-hidden-content .note-node-content pre {
+  g.note-hidden-content .note-node-content pre,
+  .note-measure-content pre {
     background: rgba(0, 0, 0, 0.08);
     padding: 3px;
     border-radius: 2px;
@@ -411,32 +638,37 @@
     margin: 2px 0;
   }
 
-  g.note-hidden-content .note-node-content pre code {
+  g.note-hidden-content .note-node-content pre code,
+  .note-measure-content pre code {
     background: none;
     padding: 0;
   }
 
-  g.note-hidden-content .note-node-content a {
+  g.note-hidden-content .note-node-content a,
+  .note-measure-content a {
     color: #0066cc;
     text-decoration: underline;
   }
 
-  g.note-hidden-content .note-node-content blockquote {
+  g.note-hidden-content .note-node-content blockquote,
+  .note-measure-content blockquote {
     border-left: 2px solid currentColor;
     margin: 2px 0;
     padding-left: 6px;
     font-style: italic;
   }
 
-  /*
-       CSS Hiding Logic for Sticky Note
-       Hide Node-RED's default label text, icons, etc.
-    */
   g.note-hidden-content text,
   g.note-hidden-content .node_icon_group,
+  g.note-hidden-content .red-ui-flow-node-icon-group,
+  g.note-hidden-content .red-ui-flow-node-icon-shade,
   g.note-hidden-content .node_icon,
   g.note-hidden-content image {
     display: none !important;
     visibility: hidden !important;
+  }
+
+  g.note-render-pending {
+    visibility: hidden;
   }
 </style>
