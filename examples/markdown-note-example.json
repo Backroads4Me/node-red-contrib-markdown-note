@@ -2,7 +2,7 @@
     {
         "id": "4f7d74f95361cf12",
         "type": "tab",
-        "label": "Flow 1",
+        "label": "Markdown Note Example",
         "disabled": false,
         "info": "",
         "env": []
@@ -21,7 +21,6 @@
         "id": "b733d4e9097687f6",
         "type": "note",
         "z": "4f7d74f95361cf12",
-        "name": "",
         "content": "# This is a note! 📝\nA node for displaying **Markdown-formatted notes** in Node-RED.  \nUnlike a comment, a note always displays its full content.\nUse notes to document your flows, provide instructions, or communicate key information.\n\n## Headings\n# Heading 1\n## Heading 2\n\n## Text Formatting\n**Bold text**  \n*Italic text*  \n~~Strikethrough~~  \n`Inline code`\n\n## Lists\n- Bullet item  \n- Another bullet item\n\n1. Numbered item  \n2. Second numbered item\n\n> Notes are ideal for explaining node behavior, flow logic, or key settings.\n\nNotes even have emojis! ⚙️✏️💻➡️🔄📊",
         "x": 460,
         "y": 360,
@@ -31,10 +30,9 @@
         "id": "907e213304ab42cf",
         "type": "note",
         "z": "4f7d74f95361cf12",
-        "name": "",
         "content": "# ⚠️ Warning to Future Self\n**DO NOT DELETE THIS NODE.**\nThe guy that trained me said don't ever touch it.\n\n### Why does this work?\n* I don't know. 🤷‍♂️\n* You don't know.\n* Just let it be.",
         "bgcolor": "#e01b24",
-        "textcolor": "#333333",
+        "textcolor": "#ffffff",
         "x": 680,
         "y": 787,
         "wires": []
@@ -43,7 +41,6 @@
         "id": "f36ce0deb08b12ba",
         "type": "note",
         "z": "4f7d74f95361cf12",
-        "name": "",
         "content": "# 🗺️ Project Roadmap\n\nThe timeline for this flow's perfection:\n\n* [x] Hack it together at 2AM ☕\n* [ ] Refactor code (Scheduled for 2035)\n* [ ] Write documentation (lol) 🤣\n* [ ] ~~Fix that one bug~~ *It's a feature now*\n\n*Current Status: It works on my machine.* 🖥️",
         "x": 290,
         "y": 803,

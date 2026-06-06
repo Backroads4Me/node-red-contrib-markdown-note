@@ -4,7 +4,6 @@
     // Palette/pre-render color only; per-node color is applied in renderNoteNode.
     color: "#F3E5AB",
     defaults: {
-      name: { value: "" },
       content: { value: "" },
       bgcolor: { value: "#F3E5AB" },
       textcolor: { value: "#333333" },
@@ -68,18 +67,34 @@
     },
     oneditresize: function (size) {
       var rows = $("#dialog-form>div:not(.node-text-editor-row)");
-      var height = $("#dialog-form").height();
+      var height = size.height;
       for (var i = 0; i < rows.length; i++) {
         height -= $(rows[i]).outerHeight(true);
       }
       var editorRow = $("#dialog-form>div.node-text-editor-row");
-      height -=
-        parseInt(editorRow.css("marginTop")) +
-        parseInt(editorRow.css("marginBottom"));
+      var marginTop = parseInt(editorRow.css("marginTop"), 10) || 0;
+      var marginBottom = parseInt(editorRow.css("marginBottom"), 10) || 0;
+      height -= marginTop + marginBottom;
       $(".node-text-editor").css("height", height + "px");
-      this.editor.resize();
+      if (this.editor) {
+        this.editor.resize();
+      }
     },
   });
+
+  var renderAllNotesTimer;
+
+  function scheduleAllNotesRender(delay) {
+    clearTimeout(renderAllNotesTimer);
+    renderAllNotesTimer = setTimeout(function () {
+      renderAllNotesTimer = undefined;
+      RED.nodes.eachNode(function (node) {
+        if (node.type === "note") {
+          renderNoteNode(node);
+        }
+      });
+    }, delay);
+  }
 
   RED.events.on("nodes:add", function (node) {
     if (node.type === "note") {
@@ -108,44 +123,20 @@
   });
 
   RED.events.on("view:redraw", function () {
-    setTimeout(function () {
-      RED.nodes.eachNode(function (node) {
-        if (node.type === "note") {
-          renderNoteNode(node);
-        }
-      });
-    }, 100);
+    scheduleAllNotesRender(100);
   });
 
   RED.events.on("workspace:change", function () {
-    setTimeout(function () {
-      RED.nodes.eachNode(function (node) {
-        if (node.type === "note") {
-          renderNoteNode(node);
-        }
-      });
-    }, 150);
+    scheduleAllNotesRender(150);
   });
 
   RED.events.on("flows:loaded", function () {
-    setTimeout(function () {
-      RED.nodes.eachNode(function (node) {
-        if (node.type === "note") {
-          renderNoteNode(node);
-        }
-      });
-    }, 200);
+    scheduleAllNotesRender(200);
   });
 
-  setTimeout(function () {
-    if (RED.nodes && RED.nodes.eachNode) {
-      RED.nodes.eachNode(function (node) {
-        if (node.type === "note") {
-          renderNoteNode(node);
-        }
-      });
-    }
-  }, 500);
+  if (RED.nodes && RED.nodes.eachNode) {
+    scheduleAllNotesRender(500);
+  }
 
   function hideNoteUntilRendered(node) {
     node._noteRenderPending = true;
@@ -169,8 +160,18 @@
     }
   }
 
-  function cssAttributeEscape(value) {
-    return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  function getNodeCssSelector(nodeId) {
+    if (window.CSS && typeof window.CSS.escape === "function") {
+      return "g#" + window.CSS.escape(String(nodeId));
+    }
+
+    var escaped = String(nodeId).replace(
+      /[\\\x00-\x1f\x7f"]/g,
+      function (character) {
+        return "\\" + character.charCodeAt(0).toString(16) + " ";
+      },
+    );
+    return 'g[id="' + escaped + '"]';
   }
 
   function applyPendingHideRule(node) {
@@ -179,9 +180,7 @@
     var style = document.createElement("style");
     style.type = "text/css";
     style.textContent =
-      'g[id="' +
-      cssAttributeEscape(node.id) +
-      '"] { visibility: hidden !important; }';
+      getNodeCssSelector(node.id) + " { visibility: hidden !important; }";
     document.head.appendChild(style);
     node._notePendingHideStyle = style;
   }
@@ -376,7 +375,13 @@
 
   function renderNoteNode(node, keepHidden) {
     var nodeEl = document.getElementById(node.id);
-    if (!nodeEl) return;
+    if (!nodeEl) {
+      if (node._noteRenderPending) {
+        removePendingHideRule(node);
+        node._noteRenderPending = false;
+      }
+      return;
+    }
 
     var g = d3.select(nodeEl);
     var restoreVisibility = function () {
@@ -508,31 +513,29 @@
 <script type="text/html" data-template-name="note">
   <div class="form-row note-color-row">
     <label for="node-input-bgcolor">Background</label>
-    <input type="color" id="node-input-bgcolor" style="width:60px; height:28px; padding:1px; cursor:pointer;" />
+    <input type="color" id="node-input-bgcolor" />
     <label for="node-input-textcolor">Text</label>
-    <input type="color" id="node-input-textcolor" style="width:60px; height:28px; padding:1px; cursor:pointer;" />
+    <input type="color" id="node-input-textcolor" />
     <button type="button" id="node-input-reset-colors" class="red-ui-button">Reset</button>
   </div>
   <div class="form-row node-text-editor-row">
     <input type="hidden" id="node-input-content" />
     <div
-      style="height: 250px; min-height:150px;"
-      class="node-text-editor"
+      class="node-text-editor note-content-editor"
       id="node-input-content-editor"
     ></div>
   </div>
 </script>
 
 <script type="text/html" data-help-name="note">
-  <p>A node for displaying markdown-formatted notes in your flow.</p>
-  <h3>Usage</h3>
+  <p>Displays an editor-only, markdown-formatted note on the flow canvas.</p>
+  <h3>Details</h3>
   <p>
     Use this node to add documentation, instructions, or annotations directly in
     your Node-RED flows.
   </p>
   <p>
-    Double-click to edit. Use the toolbar buttons or type markdown syntax
-    directly:
+    Double-click to edit and enter markdown syntax directly:
   </p>
   <ul>
     <li><b>Headers:</b> # H1, ## H2, ### H3</li>
@@ -543,6 +546,7 @@
     <li><b>Links:</b> [text](url)</li>
     <li><b>Quote:</b> > text</li>
   </ul>
+  <p>Links are displayed but are not clickable on the flow canvas.</p>
 </script>
 
 <style>
@@ -561,11 +565,20 @@
 
   .note-color-row input[type="color"] {
     flex: 0 0 auto;
+    width: 60px;
+    height: 28px;
+    padding: 1px;
+    cursor: pointer;
     margin-right: 16px;
   }
 
   .note-color-row button {
     margin-left: 16px;
+  }
+
+  .note-content-editor {
+    height: 250px;
+    min-height: 150px;
   }
 
   g.note-hidden-content .note-node-content,

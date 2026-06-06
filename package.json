@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-markdown-note",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "A Node-RED node for adding rich Markdown notes and annotations to your flows.",
   "keywords": [
     "node-red",
@@ -12,7 +12,7 @@
     "comment",
     "documentation"
   ],
-  "author": "Ted Lanham <Backroads4me@gmail.com>",
+  "author": "Ted Lanham",
   "license": "MIT",
   "homepage": "https://github.com/Backroads4Me/node-red-contrib-markdown-note",
   "bugs": {

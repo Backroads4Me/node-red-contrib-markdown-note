@@ -34,7 +34,7 @@ The standard Comment node hides content by default. Markdown Note keeps your not
 - **Markdown rendering** – Support for headers, lists, emphasis, code blocks, quotes.  
 - **Custom colors** – Choose the note background and text color from the node properties.
 - **Task lists** – Track TODOs or action items inline.  
-- **Resizable & readable layout** – Automatically adjusts to content size.  
+- **Content-aware layout** – Automatically adjusts to the rendered content.
 - **Developer-focused** – Document payload formats, API contracts, assumptions, or edge cases directly on the flow.  
 
 ---
@@ -47,22 +47,24 @@ The standard Comment node hides content by default. Markdown Note keeps your not
 
 ## Installation
 
-### Using the Palette Manager (recommended)
+Requires Node-RED 3.0 or later.
 
-1. Open Node-RED in your browser
-2. Go to **Menu** → **Manage palette** → **Install**
-3. Search for `node-red-contrib-markdown-note`
-4. Click **Install**
+1. Open Node-RED and go to **Menu** → **Manage palette** → **Install**
+2. Search for `node-red-contrib-markdown-note` and click **Install**
+3. Restart Node-RED when prompted
 
-### Using npm
+Advanced users can also install via `npm install node-red-contrib-markdown-note` in the Node-RED user directory.
 
-Run this in your Node-RED user directory (`~/.node-red`):
+---
 
-```bash
-npm install node-red-contrib-markdown-note
-```
+## Example flow
 
-Then restart Node-RED.
+After installing and restarting Node-RED, open the built-in example from
+**Menu** → **Import** → **Examples** → `node-red-contrib-markdown-note`.
+
+> **Note:** Node-RED must be restarted after installation before importing.
+> If you import first, Node-RED will report `Imported unrecognized type: note`
+> and the nodes will not render.
 
 ---
 
