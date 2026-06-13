@@ -122,6 +122,13 @@
     }
   });
 
+  RED.events.on("nodes:remove", function (node) {
+    if (node.type === "note") {
+      removePendingHideRule(node);
+      node._noteRenderPending = false;
+    }
+  });
+
   RED.events.on("view:redraw", function () {
     scheduleAllNotesRender(100);
   });
@@ -178,7 +185,6 @@
     removePendingHideRule(node);
 
     var style = document.createElement("style");
-    style.type = "text/css";
     style.textContent =
       getNodeCssSelector(node.id) + " { visibility: hidden !important; }";
     document.head.appendChild(style);
@@ -328,7 +334,13 @@
       node._noteLeftX = node.x - width / 2;
     }
     if (typeof node._noteTopY !== "number") {
-      node._noteTopY = node.y - node._noteLastH / 2;
+      var lastHeight =
+        typeof node._noteLastH === "number"
+          ? node._noteLastH
+          : typeof node.h === "number"
+            ? node.h
+            : finalHeight;
+      node._noteTopY = node.y - lastHeight / 2;
     }
 
     node.w = width;
@@ -402,9 +414,6 @@
         return;
       }
 
-      g.selectAll(".note-overlay").remove();
-      g.classed("note-hidden-content", true);
-
       var rect = g.select("rect.node");
       if (rect.empty()) rect = g.select("rect");
       if (rect.empty()) {
@@ -413,13 +422,41 @@
 
       var bgcolor = node.bgcolor || "#F3E5AB";
       var textcolor = node.textcolor || "#333333";
-      rect.style("fill", bgcolor).style("fill-opacity", 1);
 
       var bbox = rect.node().getBBox();
       var w = bbox.width;
       var inset = 1;
-      var finalMarkdown = processMarkdownContent(node.content || "");
-      var html = RED.utils.renderMarkdown(finalMarkdown);
+      rect.style("fill", bgcolor).style("fill-opacity", 1);
+
+      // Skip the full overlay rebuild when nothing observable has changed.
+      // view:redraw fires on every canvas interaction, so this is the hot path.
+      var renderSig =
+        JSON.stringify([node.content || "", bgcolor, textcolor]);
+      if (
+        !node._noteRenderPending &&
+        node._noteRenderSig === renderSig &&
+        !g.select(".note-overlay").empty() &&
+        node._noteLastW === w &&
+        node._noteLastH === node.h &&
+        node._noteLastX === node.x &&
+        node._noteLastY === node.y
+      ) {
+        return;
+      }
+
+      g.selectAll(".note-overlay").remove();
+      g.classed("note-hidden-content", true);
+
+      var html;
+      if (node._noteRenderSig === renderSig && node._noteHtmlCache) {
+        html = node._noteHtmlCache;
+      } else {
+        html = RED.utils.renderMarkdown(
+          processMarkdownContent(node.content || ""),
+        );
+      }
+      node._noteHtmlCache = html;
+      node._noteRenderSig = renderSig;
 
       var fo = g
         .append("foreignObject")
