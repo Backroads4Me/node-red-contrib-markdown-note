@@ -7,6 +7,10 @@
       content: { value: "" },
       bgcolor: { value: "#F3E5AB" },
       textcolor: { value: "#333333" },
+      // Persisted rendered height so the label (and therefore Node-RED's
+      // height calculation) is correct on the very first draw after a page
+      // load, before any measurement has run.
+      noteHeight: { value: 0 },
     },
     inputs: 0,
     outputs: 0,
@@ -23,14 +27,18 @@
         return /^#[0-9a-fA-F]{6}$/.test(value || "") ? value : fallback;
       };
 
-      $("#node-input-bgcolor").val(normalizeColor(this.bgcolor, defaultBgColor));
+      $("#node-input-bgcolor").val(
+        normalizeColor(this.bgcolor, defaultBgColor),
+      );
       $("#node-input-textcolor").val(
         normalizeColor(this.textcolor, defaultTextColor),
       );
-      $("#node-input-reset-colors").off("click").on("click", function () {
-        $("#node-input-bgcolor").val(defaultBgColor);
-        $("#node-input-textcolor").val(defaultTextColor);
-      });
+      $("#node-input-reset-colors")
+        .off("click")
+        .on("click", function () {
+          $("#node-input-bgcolor").val(defaultBgColor);
+          $("#node-input-textcolor").val(defaultTextColor);
+        });
 
       this.editor = RED.editor.createEditor({
         id: "node-input-content-editor",
@@ -161,9 +169,7 @@
         captureVisibleNoteGeometry(node);
       }
 
-      g
-        .classed("note-render-pending", true)
-        .style("visibility", "hidden");
+      g.classed("note-render-pending", true).style("visibility", "hidden");
     }
   }
 
@@ -193,7 +199,9 @@
 
   function removePendingHideRule(node) {
     if (node._notePendingHideStyle && node._notePendingHideStyle.parentNode) {
-      node._notePendingHideStyle.parentNode.removeChild(node._notePendingHideStyle);
+      node._notePendingHideStyle.parentNode.removeChild(
+        node._notePendingHideStyle,
+      );
     }
     delete node._notePendingHideStyle;
   }
@@ -219,8 +227,14 @@
     if (!nodeEl) return;
 
     var g = d3.select(nodeEl);
-    if (typeof node._noteLeftX === "number" && typeof node._noteTopY === "number") {
-      g.attr("transform", "translate(" + node._noteLeftX + "," + node._noteTopY + ")");
+    if (
+      typeof node._noteLeftX === "number" &&
+      typeof node._noteTopY === "number"
+    ) {
+      g.attr(
+        "transform",
+        "translate(" + node._noteLeftX + "," + node._noteTopY + ")",
+      );
     }
 
     var rect = g.select("rect.node");
@@ -250,6 +264,9 @@
   function getNoteLabel(node) {
     var label = node.content ? node.content.replace(/\n/g, "\\n ") : "note";
     var targetHeight = node._noteLabelTargetH;
+    if (typeof targetHeight !== "number") {
+      targetHeight = node.noteHeight > 0 ? node.noteHeight : undefined;
+    }
     if (typeof targetHeight !== "number") {
       return label;
     }
@@ -321,7 +338,9 @@
     measure.style.width = width - inset * 2 + "px";
     measure.style.overflow = "hidden";
     measure.style.pointerEvents = "none";
-    measure.innerHTML = RED.utils.renderMarkdown(processMarkdownContent(node.content));
+    measure.innerHTML = RED.utils.renderMarkdown(
+      processMarkdownContent(node.content),
+    );
     document.body.appendChild(measure);
 
     var minHeight = 28;
@@ -352,6 +371,7 @@
     node._noteLastX = node.x;
     node._noteLastY = node.y;
     node._noteLabelTargetH = finalHeight;
+    node.noteHeight = finalHeight;
     node.resize = false;
     applyStableNodeGeometry(node);
   }
@@ -362,7 +382,9 @@
 
     var g = d3.select(nodeEl);
     var transform = g.attr("transform") || "";
-    var translate = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/.exec(transform);
+    var translate = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/.exec(
+      transform,
+    );
     var rect = g.select("rect.node");
     if (rect.empty()) rect = g.select("rect");
     if (!rect.empty()) {
@@ -430,8 +452,7 @@
 
       // Skip the full overlay rebuild when nothing observable has changed.
       // view:redraw fires on every canvas interaction, so this is the hot path.
-      var renderSig =
-        JSON.stringify([node.content || "", bgcolor, textcolor]);
+      var renderSig = JSON.stringify([node.content || "", bgcolor, textcolor]);
       if (
         !node._noteRenderPending &&
         node._noteRenderSig === renderSig &&
@@ -511,13 +532,15 @@
         var movedY = !node._noteRenderPending && Math.abs(dy) > MOVE_TOLERANCE;
 
         if (typeof node._noteTopY !== "number") {
-          node._noteTopY = node.y - currentH / 2;
+          // First render this session: derive the anchor from the persisted
+          // center and the measured height.
+          node._noteTopY = node.y - finalHeight / 2;
         } else if (movedX || movedY) {
           node._noteTopY = node.y - currentH / 2;
         }
 
         if (typeof node._noteLeftX !== "number") {
-          node._noteLeftX = node.x - currentW / 2;
+          node._noteLeftX = node.x - w / 2;
         } else if (movedX || movedY) {
           node._noteLeftX = node.x - currentW / 2;
         }
@@ -531,9 +554,12 @@
         node._noteLastX = node.x;
         node._noteLastY = node.y;
         node._noteLabelTargetH = finalHeight;
+        node.noteHeight = finalHeight;
 
         var transform = g.attr("transform") || "";
-        var translate = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/.exec(transform);
+        var translate = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/.exec(
+          transform,
+        );
         if (translate) {
           g.attr(
             "transform",
@@ -553,7 +579,9 @@
     <input type="color" id="node-input-bgcolor" />
     <label for="node-input-textcolor">Text</label>
     <input type="color" id="node-input-textcolor" />
-    <button type="button" id="node-input-reset-colors" class="red-ui-button">Reset</button>
+    <button type="button" id="node-input-reset-colors" class="red-ui-button">
+      Reset
+    </button>
   </div>
   <div class="form-row node-text-editor-row">
     <input type="hidden" id="node-input-content" />
@@ -571,9 +599,7 @@
     Use this node to add documentation, instructions, or annotations directly in
     your Node-RED flows.
   </p>
-  <p>
-    Double-click to edit and enter markdown syntax directly:
-  </p>
+  <p>Double-click to edit and enter markdown syntax directly:</p>
   <ul>
     <li><b>Headers:</b> # H1, ## H2, ### H3</li>
     <li><b>Bold:</b> **text**</li>
